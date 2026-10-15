@@ -257,12 +257,19 @@ def grounding_caption(res: dict) -> None:
     st.caption(format_usage(res["model"], res.get("usage", {})) + note)
 
 
+TAB_LABELS = ["Overview", "Architecture", "Learning path", "Ask about a feature", "File explorer"]
+
+
 def ask_about(question: str) -> None:
+    """Load a question into the Ask tab and switch to it."""
     S["feature_question"] = question
+    S["active_tab"] = "Ask about a feature"
 
 
 def explain_file(path: str) -> None:
+    """Open a file in the File explorer tab and switch to it."""
     S["selected_file"] = path
+    S["active_tab"] = "File explorer"
 
 
 # --------------------------------------------------------------------------- main
@@ -329,9 +336,8 @@ if offer and offer.results:
             S["store_message"] = "Deleted the saved AI results for this repository version."
             st.rerun()
 
-tab_overview, tab_arch, tab_path, tab_ask, tab_files = st.tabs(
-    ["Overview", "Architecture", "Learning path", "Ask about a feature", "File explorer"]
-)
+# Keyed and state-tracking so buttons elsewhere can switch tabs (see explain_file / ask_about).
+tab_overview, tab_arch, tab_path, tab_ask, tab_files = st.tabs(TAB_LABELS, key="active_tab", on_change="rerun")
 
 # --------------------------------------------------------------------------- overview
 with tab_overview:
@@ -485,13 +491,13 @@ with tab_path:
                     st.caption("Concepts: " + ", ".join(step["concepts"]))
                 render_citations(snap, step.get("citations", []), f"lp{i}")
                 st.button("Explain this file", key=f"lp-file-{i}", on_click=explain_file,
-                          args=(step.get("path"),), help="Opens it in the File explorer tab")
+                          args=(step.get("path"),), help="Opens this file in the File explorer tab. No AI call; nothing is charged.")
         st.markdown("#### Explore next")
         for i, nxt in enumerate(d.get("explore_next", [])):
             c1, c2 = st.columns([4, 1])
             c1.markdown(f"**{nxt.get('title')}** — {nxt.get('why', '')}  \n_{nxt.get('question')}_")
             c2.button("Ask this", key=f"nx{i}", on_click=ask_about, args=(nxt.get("question", ""),),
-                      help="Loads the question into the 'Ask about a feature' tab")
+                      help="Opens the 'Ask about a feature' tab with this question filled in. No AI call until you press Explain with AI.")
     else:
         st.caption("Baseline order derived from the README, manifests, entry points and import counts. "
                    "Each reason below is a checked fact unless marked as an assumption.")
@@ -505,7 +511,7 @@ with tab_path:
                 with st.expander("Preview"):
                     show_code(snap, step.path, 1, 40)
                 st.button("Explain this file", key=f"blp-file-{i}", on_click=explain_file, args=(step.path,),
-                          help="Opens it in the File explorer tab")
+                          help="Opens this file in the File explorer tab. No AI call; nothing is charged.")
     st.divider()
     ai_section("learning_path", "Generate AI learning path", "learning_path")
 
@@ -556,9 +562,10 @@ with tab_ask:
 with tab_files:
     ranked_paths = [r.path for r in ana.ranked_files]
     ordered = ranked_paths + sorted(p for p in snap.files if p not in set(ranked_paths))
-    default = S["selected_file"] if S["selected_file"] in snap.files else ordered[0]
-    path = st.selectbox("File (most important first)", ordered, index=ordered.index(default))
-    S["selected_file"] = path
+    if S["selected_file"] not in snap.files:
+        S["selected_file"] = ordered[0]
+    # Bound to session state, so "Explain this file" buttons can choose the file.
+    path = st.selectbox("File (most important first)", ordered, key="selected_file")
     f = snap.get(path)
     c1, c2, c3 = st.columns(3)
     c1.metric("Lines", f.line_count)
@@ -612,4 +619,4 @@ with tab_files:
             st.markdown("##### Explore next")
             for i, q in enumerate(d["follow_up_questions"]):
                 st.button(q, key=f"fileq{i}", on_click=ask_about, args=(q,),
-                          help="Loads the question into the 'Ask about a feature' tab")
+                          help="Opens the 'Ask about a feature' tab with this question filled in. No AI call until you press Explain with AI.")

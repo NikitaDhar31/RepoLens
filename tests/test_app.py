@@ -142,3 +142,41 @@ def test_delete_saved_results(isolated_store):
     next(b for b in at.button if b.label == "Delete saved results").click().run()
     assert not at.exception
     assert store.load(fp) is None
+
+
+def test_explain_this_file_opens_the_file_and_switches_tab():
+    snap = make_snapshot(SAMPLE_TS_REPO)
+    ana = analyze(snap)
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.session_state["snapshot"] = snap
+    at.session_state["analysis"] = ana
+
+    def file_picker():
+        return next(s for s in at.selectbox if s.label.startswith("File"))
+
+    at.run()
+    # The user first picks a file by hand; the button must still win afterwards.
+    file_picker().set_value("src/types/event.ts").run()
+    step = next(i for i, s in enumerate(ana.learning_path) if s.path != "src/types/event.ts")
+    [b for b in at.button if b.label == "Explain this file"][step].click().run()
+    assert not at.exception
+    assert file_picker().value == ana.learning_path[step].path
+    assert at.session_state["active_tab"] == "File explorer"
+
+
+def test_ask_this_fills_question_and_switches_tab():
+    snap = make_snapshot(SAMPLE_TS_REPO)
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.session_state["snapshot"] = snap
+    at.session_state["analysis"] = analyze(snap)
+    at.session_state["ai"] = {"learning_path@claude-opus-5-5": {
+        "data": {"goal": "g", "steps": [], "explore_next": [
+            {"title": "Webhooks", "question": "How is a webhook translated?", "why": "core flow"}]},
+        "grounding": {"grounded": 0, "unseen": 0, "bad_lines": 0, "missing_file": 0, "downgraded": 0},
+        "usage": {}, "model": "claude-opus-5-5",
+    }}
+    at.run()
+    next(b for b in at.button if b.label == "Ask this").click().run()
+    assert not at.exception
+    assert at.text_area(key="feature_question").value == "How is a webhook translated?"
+    assert at.session_state["active_tab"] == "Ask about a feature"
