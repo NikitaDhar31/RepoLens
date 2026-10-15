@@ -1,0 +1,12 @@
+[server]
+# Matches IngestLimits.max_archive_bytes (100 MB); the app re-checks the size itself.
+maxUploadSize = 100
+# Local-only by default.
+address = "localhost"
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "viewer"

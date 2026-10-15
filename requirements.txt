@@ -1,0 +1,5 @@
+streamlit>=1.50
+anthropic>=1.14
+PyGithub>=2.5
+requests>=2.32
+python-dotenv>=1.0

@@ -1,0 +1,18 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Local data (AI results saved on request; never source files)
+.repolens_cache/
+*.zip
+.DS_Store
