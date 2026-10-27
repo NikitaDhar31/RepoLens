@@ -1,0 +1,15 @@
+# Packages the course installs with conda in .devcontainer/environment.yml, installed with pip
+# here, plus JupyterLab to serve the notebooks. Versions are limited by constraints.txt.
+torchtext==0.18.0
+torchdata<0.10
+numpy
+matplotlib
+scipy
+requests
+scikit-learn
+opencv-python-headless
+ipykernel
+ipython
+ipywidgets
+jupyterlab
+setuptools

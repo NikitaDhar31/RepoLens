@@ -1,0 +1,9 @@
+# Version limits applied to every pip install in the image (they do not install anything).
+# torch/torchvision must stay on the CPU builds installed in the Dockerfile; torch 2.3 is the last
+# release torchtext supports. The rest mirror the pins in the course's .devcontainer/environment.yml.
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu
+numpy==1.26.*
+matplotlib==3.9.*
+scipy==1.13.*
+requests==2.32.*
