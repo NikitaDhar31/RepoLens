@@ -300,6 +300,7 @@ def cmd_ssh(_args) -> None:
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows defaults to cp1252, which lacks "≈"
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     for name, func in [("status", cmd_status), ("key", cmd_key), ("firewall", cmd_firewall),
