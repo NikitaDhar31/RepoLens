@@ -13,6 +13,7 @@ Usage (from the repository root, with the AWS CLI profile set up):
     python infra/sandbox_host.py up --yes        # PAID: launch the host
     python infra/sandbox_host.py start --yes     # PAID: start a stopped host
     python infra/sandbox_host.py stop            # stop the host (only the disk keeps costing)
+    python infra/sandbox_host.py autostop        # ~$0.10/month: stop the host when it sits idle
     python infra/sandbox_host.py ssh             # print the SSH command
     python infra/sandbox_host.py terminate --yes # delete the host and its disk
 
@@ -46,6 +47,12 @@ DISK_GB = 60
 AVAILABILITY_ZONE = "us-east-1a"  # t3.large is not offered in every zone (e.g. us-east-1e)
 JUPYTER_PORTS = (8800, 8899)  # one port per running sandbox container
 
+# Safety net: stop the host when average CPU stays below the threshold for this long. Reading a
+# notebook without running cells looks idle too, so this is a backstop, not the main stop button.
+AUTOSTOP_ALARM = f"{NAME}-autostop"
+AUTOSTOP_CPU_PERCENT = 2.0
+AUTOSTOP_MINUTES = 45
+
 # us-east-1 list prices (USD), for the estimates this script prints.
 PRICE_INSTANCE_HOUR = 0.0832
 PRICE_PUBLIC_IPV4_HOUR = 0.005
@@ -64,6 +71,10 @@ touch /var/lib/repolens-host-ready
 
 def ec2():
     return boto3.Session(profile_name=PROFILE, region_name=REGION).client("ec2")
+
+
+def cloudwatch():
+    return boto3.Session(profile_name=PROFILE, region_name=REGION).client("cloudwatch")
 
 
 def my_ip() -> str:
@@ -230,6 +241,7 @@ def cmd_up(args) -> None:
     inst = resp["Instances"][0]
     print(f"Launching {inst['InstanceId']} ... (Docker installs on first boot, ~2 minutes)")
     client.get_waiter("instance_running").wait(InstanceIds=[inst["InstanceId"]])
+    cmd_autostop(args)  # the alarm watches one instance ID, so every new host needs its own
     cmd_status(args)
 
 
@@ -261,6 +273,25 @@ def cmd_terminate(args) -> None:
     print(f"Terminating {inst['InstanceId']}; its disk is deleted with it.")
 
 
+def cmd_autostop(_args) -> None:
+    inst = find_instance(ec2()) or sys.exit("No host. Run `up` first.")
+    period = 300  # basic EC2 monitoring reports CPU every 5 minutes
+    cloudwatch().put_metric_alarm(
+        AlarmName=AUTOSTOP_ALARM,
+        AlarmDescription=f"Stop {NAME} after {AUTOSTOP_MINUTES} min below "
+                         f"{AUTOSTOP_CPU_PERCENT}% CPU",
+        Namespace="AWS/EC2", MetricName="CPUUtilization", Statistic="Average",
+        Dimensions=[{"Name": "InstanceId", "Value": inst["InstanceId"]}],
+        Period=period, EvaluationPeriods=AUTOSTOP_MINUTES * 60 // period,
+        Threshold=AUTOSTOP_CPU_PERCENT, ComparisonOperator="LessThanThreshold",
+        TreatMissingData="missing",  # a stopped host sends no data; leave it alone
+        AlarmActions=[f"arn:aws:automate:{REGION}:ec2:stop"],
+        Tags=TAGS,
+    )
+    print(f"Alarm {AUTOSTOP_ALARM}: stops {inst['InstanceId']} after {AUTOSTOP_MINUTES} min "
+          f"below {AUTOSTOP_CPU_PERCENT}% average CPU.")
+
+
 def cmd_ssh(_args) -> None:
     inst = find_instance(ec2())
     if not inst or not inst.get("PublicIpAddress"):
@@ -273,7 +304,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     for name, func in [("status", cmd_status), ("key", cmd_key), ("firewall", cmd_firewall),
                        ("up", cmd_up), ("start", cmd_start), ("stop", cmd_stop),
-                       ("terminate", cmd_terminate), ("ssh", cmd_ssh)]:
+                       ("terminate", cmd_terminate), ("autostop", cmd_autostop),
+                       ("ssh", cmd_ssh)]:
         p = sub.add_parser(name)
         p.set_defaults(func=func)
         if name in ("up", "start", "terminate"):
