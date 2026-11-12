@@ -166,7 +166,7 @@ another app is already using that port, add `--server.port 8502`.
 python -m pytest
 ```
 
-There are 138 tests across ingestion, analysis, AI prompting and the UI, with no network access.
+There are 140 tests across ingestion, analysis, AI prompting and the UI, with no network access.
 The GitHub client, HTTP downloads and the Anthropic SDK are replaced with fakes. Coverage includes:
 
 - **Ingestion / security:** path traversal (`..`, absolute, drive letters, backslashes, NUL), symlinks,
