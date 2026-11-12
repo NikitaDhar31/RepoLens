@@ -14,6 +14,7 @@ Usage (from the repository root, with the AWS CLI profile set up):
     python infra/sandbox_host.py start --yes     # PAID: start a stopped host
     python infra/sandbox_host.py stop            # stop the host (only the disk keeps costing)
     python infra/sandbox_host.py autostop        # ~$0.10/month: stop the host when it sits idle
+    python infra/sandbox_host.py autostop --terminate   # same, but delete it: an idle host is free
     python infra/sandbox_host.py ssh             # print the SSH command
     python infra/sandbox_host.py terminate --yes # delete the host and its disk
 
@@ -273,23 +274,37 @@ def cmd_terminate(args) -> None:
     print(f"Terminating {inst['InstanceId']}; its disk is deleted with it.")
 
 
-def cmd_autostop(_args) -> None:
+def cmd_autostop(args) -> None:
+    """Idle alarm. By default it stops the host, which leaves the disk costing. With --terminate
+    it deletes the host and its disk instead, so an idle host costs nothing at all.
+
+    Terminating loses nothing that is not recreated automatically: `up` rebuilds the host from
+    USER_DATA in a couple of minutes, and the key pair and security group survive. Only use
+    --terminate if nothing on the disk needs to outlive the session, because anything pulled or
+    built on the host (Docker images, caches) goes with it."""
     inst = find_instance(ec2()) or sys.exit("No host. Run `up` first.")
+    action = "terminate" if args.terminate else "stop"
     period = 300  # basic EC2 monitoring reports CPU every 5 minutes
     cloudwatch().put_metric_alarm(
         AlarmName=AUTOSTOP_ALARM,
-        AlarmDescription=f"Stop {NAME} after {AUTOSTOP_MINUTES} min below "
+        AlarmDescription=f"{action.capitalize()} {NAME} after {AUTOSTOP_MINUTES} min below "
                          f"{AUTOSTOP_CPU_PERCENT}% CPU",
         Namespace="AWS/EC2", MetricName="CPUUtilization", Statistic="Average",
         Dimensions=[{"Name": "InstanceId", "Value": inst["InstanceId"]}],
         Period=period, EvaluationPeriods=AUTOSTOP_MINUTES * 60 // period,
         Threshold=AUTOSTOP_CPU_PERCENT, ComparisonOperator="LessThanThreshold",
-        TreatMissingData="missing",  # a stopped host sends no data; leave it alone
-        AlarmActions=[f"arn:aws:automate:{REGION}:ec2:stop"],
+        TreatMissingData="missing",  # a stopped or terminated host sends no data; leave it alone
+        AlarmActions=[f"arn:aws:automate:{REGION}:ec2:{action}"],
         Tags=TAGS,
     )
-    print(f"Alarm {AUTOSTOP_ALARM}: stops {inst['InstanceId']} after {AUTOSTOP_MINUTES} min "
+    print(f"Alarm {AUTOSTOP_ALARM}: {action}s {inst['InstanceId']} after {AUTOSTOP_MINUTES} min "
           f"below {AUTOSTOP_CPU_PERCENT}% average CPU.")
+    if args.terminate:
+        print("The disk is deleted with it, so an idle host costs nothing. "
+              "Rebuild with `up --yes` (a couple of minutes).")
+    else:
+        print(f"The disk still costs ≈ ${disk_monthly_cost():.2f}/month while stopped. "
+              f"Use `autostop --terminate` to delete the host instead.")
 
 
 def cmd_ssh(_args) -> None:
@@ -313,6 +328,10 @@ def main() -> None:
             p.add_argument("--yes", action="store_true", help="confirm a paid or destructive action")
         if name == "up":
             p.add_argument("--dry-run", action="store_true", help="check permissions only")
+        if name == "autostop":
+            p.add_argument("--terminate", action="store_true",
+                           help="delete the idle host and its disk instead of stopping it, "
+                                "so it then costs nothing")
     args = parser.parse_args()
     args.func(args)
 
