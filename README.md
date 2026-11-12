@@ -265,3 +265,9 @@ original overview schema ("compiled grammar is too large"), so it was slimmed do
 **Build a small evaluation set on IntentOS**: 10–15 questions with known answers and known source
 locations. Track answer accuracy, citation pass rate and downgrade rate, so retrieval and prompt
 changes (like the whole-file change above) are measured rather than judged by eye.
+
+## License
+
+Created by [Nikita Dhar](https://github.com/NikitaDhar31). MIT licensed: see
+[LICENSE](LICENSE). You're welcome to use, change and share it; copies and forks must
+keep the copyright notice.
